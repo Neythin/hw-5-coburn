@@ -91,7 +91,7 @@ pokeFlow <- workflow() %>%
 
 pokeGrid <- grid_regular(penalty(range = c(-5, 5)), mixture(range = c(0, 1)), levels = 10)
 ```
-In total, we will be fitting x models when we fit the models to the folded data.
+In total, we will be fitting 500 models when we fit the models to the folded data.
 
 ## Question 6
 
