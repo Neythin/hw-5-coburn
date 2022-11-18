@@ -1,0 +1,119 @@
+---
+title: "hw5"
+author: "Nathan De Los Santos"
+output:
+  pdf_document: default
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidymodels)
+library(tidyverse)
+library(ISLR) # For the Smarket data set
+library(ISLR2) # For the Bikeshare data set
+library(discrim)
+library(poissonreg)
+library(corrr)
+library(klaR) # for naive bayes
+library(ggplot2)
+library(ggthemes)
+library(pROC)
+tidymodels_prefer()
+pokemon_data <- read.csv('homework-5/data/pokemon.csv')
+```
+
+## Question 1
+
+```{r}
+library(janitor)
+
+pokemon <- clean_names(pokemon_data)
+```
+The clean_names() function is useful because it removes spaces from variable names and can also alter the capitalization depending on what you specify. Moreover, all variable names are unique and can only consist of characters, numbers, and letters.
+
+## Question 2
+
+```{r}
+pokemon %>%
+  ggplot(aes(y = type_1)) +
+  geom_bar()
+```
+There are 18 classes for Pokemon types. By looking at the graph, we can see that "flying" types are relatively low in count.
+
+```{r}
+pokemon %>%
+  filter(type_1 == c('Bug', 'Fire', 'Grass', 'Normal', 'Water', 'Psychic'))
+
+pokemon$type_1 <- factor(pokemon$type_1)
+pokemon$legendary <- factor(pokemon$legendary)
+```
+
+## Question 3
+
+```{r}
+pokeSplit <- initial_split(pokemon, prop = 0.7, strata = type_1)
+pokeTrain <- training(pokeSplit)
+pokeTest <- testing(pokeSplit)
+```
+Total Observations: 800
+Training: 559 (800*.7)
+Testing: 241 (800*.3)
+
+```{r}
+pokeFold <- vfold_cv(pokeTrain, strata = type_1, v = 5)
+```
+Stratifying on a k-fold cross validation is beneficial because it ensures that each fold is an appropriate representative of the whole data set.
+
+## Question 4
+
+```{r}
+pokeRecipe <- recipe(type_1 ~ legendary + generation + sp_atk + attack, speed, defense, hp, sp_def, data=pokeTrain) %>% 
+  step_dummy(all_nominal_predictors()) %>%
+  step_center(all_nominal_predictors()) %>% 
+  step_scale(all_nominal_predictors())
+```
+
+## Question 5
+
+```{r}
+pokeFit <- multinom_reg(penalty = tune(), mixture = tune()) %>% 
+  set_engine('glmnet') %>% 
+  set_mode('classification')
+
+pokeFlow <- workflow() %>% 
+  add_model(pokeFit) %>% 
+  add_recipe(pokeRecipe)
+
+pokeGrid <- grid_regular(penalty(range = c(-5, 5)), mixture(range = c(0, 1)), levels = 10)
+```
+In total, we will be fitting x models when we fit the models to the folded data.
+
+## Question 6
+
+```{r}
+pokeTune <- tune_grid(pokeFlow, resamples = pokeFold, grid = pokeGrid)
+```
+
+## Question 7
+
+```{r}
+pokeBest <- select_best(pokeTune, metric = 'roc_auc')
+
+pokeFinal <- finalize_workflow(pokeFlow, pokeBest)
+
+pokeLast <- fit(pokeFinal, data = pokeTrain)
+
+pokePredict <- augment(pokeLast, new_data = pokeTest) %>% 
+  select(type_1, starts_with(".pred"))
+```
+
+## Question 8
+
+```{r}
+pokePredict %>% roc_auc(type_1, .pred_Bug:.pred_Water)
+```
